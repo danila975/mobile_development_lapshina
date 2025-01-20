@@ -1,21 +1,34 @@
+// AddInstructionScreen.kt
 package com.example.sputnik.view
 
-import kotlinx.coroutines.flow.first
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.sputnik.controller.InstructionController
 import com.example.sputnik.model.Instruction
 import com.example.sputnik.model.Section
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import androidx.compose.ui.platform.LocalContext
+import kotlin.math.absoluteValue
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddInstructionScreen(navController: NavController) {
@@ -27,23 +40,32 @@ fun AddInstructionScreen(navController: NavController) {
     var instructionTitle by remember { mutableStateOf("") }
     var instructionContent by remember { mutableStateOf("") }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Добавить инструкцию") },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                    IconButton(
+                        onClick = { navController.popBackStack() },
+                        modifier = Modifier.semantics { contentDescription = "Назад" }
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = null
+                        )
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.Top
         ) {
             TextField(
                 value = sectionTitle,
@@ -51,52 +73,66 @@ fun AddInstructionScreen(navController: NavController) {
                 label = { Text("Секция") },
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = instructionTitle,
                 onValueChange = { instructionTitle = it },
                 label = { Text("Название инструкции") },
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(modifier = Modifier.height(8.dp))
             TextField(
                 value = instructionContent,
                 onValueChange = { instructionContent = it },
                 label = { Text("Текст инструкции") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(150.dp)
+                    .height(150.dp),
+                singleLine = false,
+                maxLines = 10
             )
+            Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    coroutineScope.launch {
-                        val sectionId = sectionTitle.hashCode()
-                        // Добавляем секцию, если ее нет
-                        val existingSections = instructionController.getSections().first()
-                        if (existingSections.none { it.id == sectionId }) {
-                            val newSection = Section(id = sectionId, title = sectionTitle)
-                            instructionController.addSection(newSection)
+                    if (sectionTitle.isBlank() || instructionTitle.isBlank() || instructionContent.isBlank()) {
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Пожалуйста, заполните все поля")
                         }
-                        // Добавляем инструкцию
-                        val newInstruction = Instruction(
-                            id = generateUniqueId(),
-                            sectionId = sectionId,
-                            title = instructionTitle,
-                            content = instructionContent
-                        )
-                        instructionController.addInstruction(newInstruction)
-                        // Возвращаемся назад
-                        navController.popBackStack()
+                    } else {
+                        coroutineScope.launch {
+                            try {
+                                val sectionId = sectionTitle.hashCode().absoluteValue
+                                val instructionId = instructionTitle.hashCode().absoluteValue
+
+                                // Получаем текущие секции
+                                val existingSections = instructionController.getSections().first()
+
+                                // Проверяем, существует ли секция с таким ID
+                                if (existingSections.none { section -> section.id == sectionId }) {
+                                    val newSection = Section(id = sectionId, title = sectionTitle)
+                                    instructionController.addSection(newSection)
+                                }
+
+                                val newInstruction = Instruction(
+                                    id = instructionId,
+                                    sectionId = sectionId,
+                                    title = instructionTitle,
+                                    content = instructionContent
+                                )
+
+                                instructionController.addInstruction(newInstruction)
+                                navController.popBackStack()
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                                snackbarHostState.showSnackbar("Ошибка при сохранении инструкции")
+                            }
+                        }
                     }
                 },
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(top = 16.dp)
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Сохранить")
             }
         }
     }
-}
-
-fun generateUniqueId(): Int {
-    return (System.currentTimeMillis() % Int.MAX_VALUE).toInt()
 }

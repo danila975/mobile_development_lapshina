@@ -1,19 +1,20 @@
+// FavoritesScreen.kt
 package com.example.sputnik.view
 
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.foundation.clickable
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.dp // Добавили импорт для dp
 import androidx.navigation.NavController
 import com.example.sputnik.controller.InstructionController
 import com.example.sputnik.model.Instruction
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -21,58 +22,47 @@ import kotlinx.coroutines.launch
 fun FavoritesScreen(navController: NavController) {
     val context = LocalContext.current
     val instructionController = remember { InstructionController(context) }
-    val coroutineScope = rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope() // Создаём CoroutineScope здесь
 
-    val favoriteInstructions by instructionController.getFavoriteInstructions().collectAsState(initial = emptyList())
+    val favoriteInstructions by produceState(initialValue = emptyList<Instruction>()) {
+        instructionController.getFavoriteInstructions()
+            .catch { e ->
+                e.printStackTrace()
+                Log.e("FavoritesScreen", "Ошибка при получении избранных инструкций", e)
+                // Можно обновить значение по умолчанию или уведомить пользователя
+            }
+            .collect { instructions ->
+                value = instructions
+            }
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Избранное") })
-        },
-        bottomBar = {
-            BottomNavigationBar(navController)
+            TopAppBar(
+                title = { Text("Избранное") }
+            )
         }
     ) { paddingValues ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(paddingValues)
-                .padding(16.dp)
-        ) {
-            items(favoriteInstructions) { instruction ->
-                FavoriteInstructionRow(
-                    instruction = instruction,
-                    navController = navController,
-                    instructionController = instructionController
-                )
+        if (favoriteInstructions.isEmpty()) {
+            Text(
+                text = "Список избранных инструкций пуст",
+                modifier = Modifier
+                    .padding(paddingValues)
+                    .padding(16.dp)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.padding(paddingValues)
+            ) {
+                items(items = favoriteInstructions) { instruction ->
+                    InstructionItem(
+                        instruction = instruction,
+                        navController = navController,
+                        instructionController = instructionController,
+                        coroutineScope = coroutineScope // Передаём coroutineScope
+                    )
+                }
             }
-        }
-    }
-}
-
-@Composable
-fun FavoriteInstructionRow(
-    instruction: Instruction,
-    navController: NavController,
-    instructionController: InstructionController
-) {
-    val coroutineScope = rememberCoroutineScope()
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                navController.navigate("instructionDetail/${instruction.id}")
-            }
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = instruction.title)
-        IconButton(onClick = {
-            coroutineScope.launch {
-                instructionController.removeFromFavorites(instruction)
-            }
-        }) {
-            Icon(Icons.Default.Delete, contentDescription = "Удалить из избранного")
         }
     }
 }

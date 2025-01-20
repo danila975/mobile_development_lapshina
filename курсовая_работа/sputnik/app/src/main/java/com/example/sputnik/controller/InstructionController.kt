@@ -1,58 +1,138 @@
+// InstructionController.kt
 package com.example.sputnik.controller
 
 import android.content.Context
+import android.util.Log
 import com.example.sputnik.data.DataStoreManager
 import com.example.sputnik.model.Instruction
 import com.example.sputnik.model.Section
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class InstructionController(context: Context) {
-
     private val dataStoreManager = DataStoreManager(context)
+    private val instructions = MutableStateFlow<List<Instruction>>(emptyList())
+    private val sections = MutableStateFlow<List<Section>>(emptyList())
+    private val scope = CoroutineScope(Dispatchers.IO)
 
-    // Инструкции
-    fun getInstructions(): Flow<List<Instruction>> = dataStoreManager.getInstructions()
+    init {
+        scope.launch {
+            try {
+                instructions.value = dataStoreManager.getInstructions().first()
+                sections.value = dataStoreManager.getSections().first()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.e("InstructionController", "Ошибка при загрузке данных", e)
+                instructions.value = emptyList()
+                sections.value = emptyList()
+            }
+        }
+    }
 
+    // Получение всех инструкций
+    fun getInstructions(): Flow<List<Instruction>> = instructions
+        .catch { e ->
+            e.printStackTrace()
+            Log.e("InstructionController", "Ошибка при получении инструкций", e)
+            emit(emptyList())
+        }
+
+    // Получение инструкции по ID
+    fun getInstructionById(instructionId: Int): Flow<Instruction?> {
+        return instructions
+            .map { list ->
+                list.find { it.id == instructionId }
+            }
+            .catch { e ->
+                e.printStackTrace()
+                Log.e("InstructionController", "Ошибка при получении инструкции по ID", e)
+                emit(null)
+            }
+    }
+
+    // Добавление инструкции
     suspend fun addInstruction(instruction: Instruction) {
-        val currentInstructions = getInstructions().first()
-        dataStoreManager.saveInstructions(currentInstructions + instruction)
+        try {
+            instructions.value = instructions.value + instruction
+            dataStoreManager.saveInstructions(instructions.value)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Log.e("InstructionController", "Ошибка при добавлении инструкции", e)
+            // При необходимости можно выполнить откат изменений
+        }
     }
 
-    suspend fun deleteInstruction(instruction: Instruction) {
-        val currentInstructions = getInstructions().first()
-        dataStoreManager.saveInstructions(currentInstructions - instruction)
+    // Добавление в избранное
+    suspend fun addToFavorites(instructionId: Int) {
+        try {
+            val updatedInstructions = instructions.value.map {
+                if (it.id == instructionId) it.copy(isFavorite = true) else it
+            }
+            instructions.value = updatedInstructions
+            dataStoreManager.saveInstructions(instructions.value)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Log.e("InstructionController", "Ошибка при добавлении в избранное", e)
+        }
     }
 
-    // Фавориты
-    suspend fun addToFavorites(instruction: Instruction) {
-        updateInstructionFavoriteStatus(instruction, true)
+    // Удаление из избранного
+    suspend fun removeFromFavorites(instructionId: Int) {
+        try {
+            val updatedInstructions = instructions.value.map {
+                if (it.id == instructionId) it.copy(isFavorite = false) else it
+            }
+            instructions.value = updatedInstructions
+            dataStoreManager.saveInstructions(instructions.value)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Log.e("InstructionController", "Ошибка при удалении из избранного", e)
+        }
     }
 
-    suspend fun removeFromFavorites(instruction: Instruction) {
-        updateInstructionFavoriteStatus(instruction, false)
-    }
-
+    // Получение избранных инструкций
     fun getFavoriteInstructions(): Flow<List<Instruction>> {
-        return getInstructions().map { instructions ->
-            instructions.filter { it.isFavorite }
-        }
+        return instructions
+            .map { list ->
+                list.filter { it.isFavorite }
+            }
+            .catch { e ->
+                e.printStackTrace()
+                Log.e("InstructionController", "Ошибка при получении избранных инструкций", e)
+                emit(emptyList())
+            }
     }
 
-    private suspend fun updateInstructionFavoriteStatus(instruction: Instruction, isFavorite: Boolean) {
-        val currentInstructions = getInstructions().first()
-        val updatedInstructions = currentInstructions.map {
-            if (it.id == instruction.id) it.copy(isFavorite = isFavorite) else it
+    // Методы для работы с секциями
+    fun getSections(): Flow<List<Section>> = sections
+        .catch { e ->
+            e.printStackTrace()
+            Log.e("InstructionController", "Ошибка при получении секций", e)
+            emit(emptyList())
         }
-        dataStoreManager.saveInstructions(updatedInstructions)
-    }
-
-    // Секции
-    fun getSections(): Flow<List<Section>> = dataStoreManager.getSections()
 
     suspend fun addSection(section: Section) {
-        val currentSections = getSections().first()
-        dataStoreManager.saveSections(currentSections + section)
+        try {
+            sections.value = sections.value + section
+            dataStoreManager.saveSections(sections.value)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Log.e("InstructionController", "Ошибка при добавлении секции", e)
+        }
+    }
+
+    // Получение инструкций по секции
+    fun getInstructionsBySectionId(sectionId: Int): Flow<List<Instruction>> {
+        return instructions
+            .map { list ->
+                list.filter { it.sectionId == sectionId }
+            }
+            .catch { e ->
+                e.printStackTrace()
+                Log.e("InstructionController", "Ошибка при получении инструкций по секции", e)
+                emit(emptyList())
+            }
     }
 }

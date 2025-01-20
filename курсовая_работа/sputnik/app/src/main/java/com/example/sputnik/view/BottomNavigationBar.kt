@@ -1,32 +1,59 @@
+// BottomNavigationBar.kt
 package com.example.sputnik.view
 
+import android.util.Log
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 
 @Composable
 fun BottomNavigationBar(navController: NavController) {
+    val items = listOf(
+        BottomNavItem("main", "Главная", Icons.Filled.Home),
+        BottomNavItem("favorites", "Избранное", Icons.Filled.Favorite)
+    )
+
     NavigationBar {
-        NavigationBarItem(
-            selected = currentRoute(navController) == "main",
-            onClick = { navController.navigate("main") },
-            icon = { Icon(Icons.Default.Home, contentDescription = "Главная") },
-            label = { Text("Главная") }
-        )
-        NavigationBarItem(
-            selected = currentRoute(navController) == "favorites",
-            onClick = { navController.navigate("favorites") },
-            icon = { Icon(Icons.Default.Favorite, contentDescription = "Избранное") },
-            label = { Text("Избранное") }
-        )
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = navBackStackEntry?.destination?.route ?: ""
+
+        items.forEach { item ->
+            NavigationBarItem(
+                selected = currentRoute == item.route,
+                onClick = {
+                    try {
+                        navController.navigate(item.route) {
+                            launchSingleTop = true
+                            popUpTo(navController.graph.startDestinationId) {
+                                saveState = true
+                            }
+                            restoreState = true
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        Log.e("BottomNavigationBar", "Ошибка при навигации на маршрут ${item.route}", e)
+                        // Дополнительно можно отобразить пользователю сообщение об ошибке
+                    }
+                },
+                icon = {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = item.label
+                    )
+                },
+                label = { Text(item.label) }
+            )
+        }
     }
 }
 
-@Composable
-fun currentRoute(navController: NavController): String? {
-    val currentBackStackEntry = navController.currentBackStackEntry
-    return currentBackStackEntry?.destination?.route
-}
+data class BottomNavItem(
+    val route: String,
+    val label: String,
+    val icon: ImageVector
+)
